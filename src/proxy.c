@@ -35,8 +35,8 @@ void proxy_run(px_config_t * config) {
     fd_set readyset;
 
     // TODO pre setup proxy listening socket
-    if ((sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP)) == -1) {
-        perror("peer_run could not create socket");
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+        perror("proxy_run could not create socket");
         exit(-1);
     }
 
@@ -44,20 +44,20 @@ void proxy_run(px_config_t * config) {
 
     bzero(&myaddr, sizeof(myaddr));
     myaddr.sin_family = AF_INET;
-    myaddr.sin_addr.s_addr = config->myaddr.sin_addr.s_addr;
-    //inet_aton("127.0.0.1", (struct in_addr *)&myaddr.sin_addr.s_addr);
-    myaddr.sin_port = htons(config->myport);
+    myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    myaddr.sin_port = htons(config->listen_port);
 
     if (bind(sock, (struct sockaddr *) &myaddr, sizeof(myaddr)) == -1) {
-        perror("peer_run could not bind socket");
+        perror("proxy_run could not bind socket");
         exit(-1);
     }
 
-    // TODO call listen() for the listener socket
+    if (listen(sock, 5)) {
+        perror("proxy_run could not bind socket");
+        exit(-1);
+    }
     // end setup proxy listening socket
-
-    // TODO: bind fake ip to outbound sock
-
+    
     // do select prep
     FD_ZERO(&config->readset);
     FD_SET(sock, &config->readset);
@@ -104,9 +104,37 @@ void proxy_run(px_config_t * config) {
     }
 }
 
-void process_browser_conn(int sock, px_config_t * config) {
+int process_browser_conn(int listenSock, px_config_t * config) {
     // TODO process new browser connection
     // TODO init struct of b_conn
+    // accept(), create new connection
+    struct sockaddr_in cliAddr;
+    socklen_t cliSize = sizeof(cliAddr);
+    int client_sock;
+    
+    if ((client_sock = accept(listenSock, (struct sockaddr *) &cliAddr,
+                         &cliSize)) == -1) {
+        perror("proxy_run could not bind socket");
+        exit(-1);    
+    }
+
+    FD_SET(client_sock, &config->readset);
+
+    if (config->max_fd < client_sock)
+        config->max_fd = client_sock;
+
+    browser_conn_t * b_conn = malloc(sizeof(browser_conn_t));
+    b_conn->fd = client_sock;
+    b_conn->bufferSize = 0;
+    b_conn->state = STATE_START;
+    b_conn->request = NULL;
+
+    px_conn_t * conn = malloc(sizeof(px_conn_t));
+    conn->b_conn = b_conn;
+    conn->s_conn = NULL;
+    conn->next = config->conns;
+
+    config->conns = conn;
 }
 
 
@@ -117,6 +145,7 @@ void process_browser_request(px_config_t * config, px_conn_t * px_conn) {
         if (b_conn->req_type == F4M_REQ) {
             // TODO for F4M_REQ, set s_conn->resp_type = F4M_RESP
             // TODO, init struct of s_conn
+            // TODO: bind fake ip to outbound sock
             process_f4m_request(config, px_conn);
         } else if (b_conn->req_type == CHUNK_REQ) {
             process_chunk_request(config, px_conn);
