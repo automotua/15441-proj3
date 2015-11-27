@@ -28,6 +28,11 @@ enum RESPONSE_EXPECT_TYPE {
     CHUNK_RESP
 };
 
+typedef struct bitrate_s {
+    int bitrate;
+    struct bitrate_s * next;
+} bitrate_t;
+
 typedef struct browser_conn_s {
     //TODO depends on how browser conn
     //     is parsed
@@ -81,6 +86,9 @@ typedef struct server_conn_s {
     int state;
 
     int content_length;
+
+    // available bitrates
+    bitrate_t * bitrates;
     
 
 } server_conn_t;

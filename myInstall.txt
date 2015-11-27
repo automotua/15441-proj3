@@ -1,3 +1,4 @@
 sudo yum install flex
 sudo yum install bison
 sudo yum install byacc
+sudo yum install expat-devel

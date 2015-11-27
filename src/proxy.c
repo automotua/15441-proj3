@@ -106,7 +106,7 @@ void proxy_run(px_config_t * config) {
 
 void process_browser_conn(int sock, px_config_t * config) {
     // TODO process new browser connection
-
+    // TODO init struct of b_conn
 }
 
 
@@ -116,6 +116,7 @@ void process_browser_request(px_config_t * config, px_conn_t * px_conn) {
     if (b_conn->is_parse_done) {
         if (b_conn->req_type == F4M_REQ) {
             // TODO for F4M_REQ, set s_conn->resp_type = F4M_RESP
+            // TODO, init struct of s_conn
             process_f4m_request(config, px_conn);
         } else if (b_conn->req_type == CHUNK_REQ) {
             process_chunk_request(config, px_conn);
@@ -139,6 +140,7 @@ void process_server_response(px_config_t * config, px_conn_t * px_conn) {
             process_chunk_response(config, px_conn);
         } else {
             // TODO unknown server response type
+            // TODO after finish a video, free bitrates
         }
         clean_sconn_after_parse(s_conn);
     }
