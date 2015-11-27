@@ -56,6 +56,8 @@ void proxy_run(px_config_t * config) {
     // TODO call listen() for the listener socket
     // end setup proxy listening socket
 
+    // TODO: bind fake ip to outbound sock
+
     // do select prep
     FD_ZERO(&config->readset);
     FD_SET(sock, &config->readset);
@@ -73,6 +75,7 @@ void proxy_run(px_config_t * config) {
             // begin new client conn
             if (FD_ISSET(sock, &readyset)) {
                 process_browser_conn(sock, config);
+                nfds--;
             }
             // end new client conn
 
@@ -81,16 +84,18 @@ void proxy_run(px_config_t * config) {
             server_conn_t * s_conn;
 
             // begin process browser / server request
-            for (; px_conn != NULL; px_conn = px_conn->next) {
+            for (; px_conn && nfds > 0; px_conn = px_conn->next) {
                 b_conn = px_conn->b_conn;
                 s_conn = px_conn->s_conn;
 
                 if (FD_ISSET(b_conn->fd, &readyset)) {
                     process_browser_request(config, px_conn);
+                    nfds--;
                 }
 
                 if (s_conn && FD_ISSET(s_conn->fd, &readyset)) {
                     process_server_response(config, px_conn);
+                    nfds--;
                 }
 
             }
@@ -110,6 +115,7 @@ void process_browser_request(px_config_t * config, px_conn_t * px_conn) {
     parse_browser_request(config, b_conn);
     if (b_conn->is_parse_done) {
         if (b_conn->req_type == F4M_REQ) {
+            // TODO for F4M_REQ, set s_conn->resp_type = F4M_RESP
             process_f4m_request(config, px_conn);
         } else if (b_conn->req_type == CHUNK_REQ) {
             process_chunk_request(config, px_conn);

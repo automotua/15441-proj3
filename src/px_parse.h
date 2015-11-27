@@ -14,15 +14,15 @@
 #define _PX_PARSE_H_
 
 #define MAX_URL_LENGTH 256
-#define MAX_HEADER_LENGTH 8192
 #define PX_FILENAME_LEN 256
+ #define MAX_HEADER_LENGTH 8192
 
 enum REQUEST_TYPE {
     F4M_REQ,
     CHUNK_REQ
 };
 
-enum RESPONSE_TYPE {
+enum RESPONSE_EXPECT_TYPE {
     F4M_RESP,
     NOLIST_F4M_RESP,
     CHUNK_RESP
@@ -36,11 +36,22 @@ typedef struct browser_conn_s {
     // browser client socket fd
     int fd;
 
-    // is parsing done(1) or not(0)
+    // is parsing done(1), not(0), or close connection due to error(-1) 
     int is_parse_done;
 
     // the url string after GET and before HTTP/1.1
     char url[MAX_URL_LENGTH];
+
+    /* buffer stores the data that has been processed 
+     * (has been processed by FSM to check CRLFCRLF) */
+    char buffer[MAX_HEADER_LENGTH];
+    int bufferSize;
+
+    // FSM state
+    int state;
+
+    // stores the request that has been parsed by lex and yacc
+    struct Request* request;
 
 } browser_conn_t;
 
@@ -48,17 +59,29 @@ typedef struct server_conn_s {
     //TODO depends on how server conn
     //     is parsed
 
-    enum RESPONSE_TYPE resp_type;
+    enum RESPONSE_EXPECT_TYPE resp_type;
 
     // binded socket btw proxy and server
     int fd;
 
-    // is parsing done(1) or not(0)
+    // is parsing done(1), not(0), or close connection due to error(-1) 
     int is_parse_done;
 
     // the file data (either .f4m or chunk files)
     // returned as response body
     char * file_data;
+    int cur_size;
+
+    /* buffer stores the header data that has been processed 
+     * (has been processed by FSM to check CRLFCRLF) */
+    char buffer[MAX_HEADER_LENGTH];
+    int bufferSize;
+
+    // FSM state
+    int state;
+
+    int content_length;
+    
 
 } server_conn_t;
 
