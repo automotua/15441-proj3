@@ -103,10 +103,10 @@ struct px_config_s {
     char log_file[PX_FILENAME_LEN];
     float alpha;
     int listen_port;
-    int fake_ip;
-    int dns_ip;
+    long fake_ip_s_addr;
+    long dns_ip_s_addr;
     int dns_port;
-    int www_ip;
+    long www_ip_s_addr;
 
     int argc;
     char ** argv;
