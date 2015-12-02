@@ -6,8 +6,8 @@
  *  Description: header file for yacc
  *  
  */
-#ifndef PARSERH
-#define PARSERH
+#ifndef _PARSER_H_
+#define _PARSER_H_
 
 /* define struct Request, when yyparse() parse the request, it will fill 
  * each parts of struct Request, so the mainRoutine could use each fiedld 

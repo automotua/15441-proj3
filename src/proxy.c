@@ -1,9 +1,25 @@
 /*
  * proxy.c
  *
+ * Authors: Ke Wu <kewu@andrew.cmu.edu>
+ *          Junqiang Li <junqiangl@andrew.cmu.edu>
+ *
  */
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <signal.h>
+#include <unistd.h>
 #include "proxy.h"
-
+#include "px_parse.h"
+#include "parser.h"
+#include "http_parse.h"
+#include "f4m.h"
+#include "chunk.h"
+#include "helper.h"
 
 int main(int argc, char **argv) {
     px_config_t config;
@@ -11,15 +27,7 @@ int main(int argc, char **argv) {
     /* initialize configuration */
     px_init(&config, argc, argv);
 
-    DPRINTF(DEBUG_INIT, "proxy.c main beginning\n");
-
     px_parse_command_line(&config);
-
-#ifdef DEBUG
-    if (debug & DEBUG_INIT) {
-        px_dump_config(&config);
-    }
-#endif
 
     /* ignore SIGPIPE in case proxy is terminated due to broken pipe */
     signal(SIGPIPE, SIG_IGN);
@@ -34,7 +42,7 @@ void proxy_run(px_config_t * config) {
     struct sockaddr_in myaddr;
     fd_set readyset;
 
-    // TODO pre setup proxy listening socket
+    // pre setup proxy listening socket
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
         perror("proxy_run could not create socket");
         exit(-1);
@@ -53,10 +61,15 @@ void proxy_run(px_config_t * config) {
     }
 
     if (listen(sock, 5)) {
-        perror("proxy_run could not bind socket");
+        perror("proxy_run could not listen socket");
         exit(-1);
     }
     // end setup proxy listening socket
+
+    // config init
+    config->conns = malloc(sizeof(px_conn_t));
+    config->conns->next = NULL;
+    config->history_bitrates = NULL;
     
     // do select prep
     FD_ZERO(&config->readset);
@@ -79,23 +92,48 @@ void proxy_run(px_config_t * config) {
             }
             // end new client conn
 
-            px_conn_t * px_conn = config->conns;
+            px_conn_t * px_conn;
             browser_conn_t * b_conn;
             server_conn_t * s_conn;
 
             // begin process browser / server request
-            for (; px_conn && nfds > 0; px_conn = px_conn->next) {
-                b_conn = px_conn->b_conn;
-                s_conn = px_conn->s_conn;
+            for (px_conn = config->conns; px_conn && px_conn->next && nfds > 0; px_conn = px_conn->next) {
+                b_conn = px_conn->next->b_conn;
+                s_conn = px_conn->next->s_conn;
+
+                int retval = 0;
 
                 if (FD_ISSET(b_conn->fd, &readyset)) {
-                    process_browser_request(config, px_conn);
+                    retval = process_browser_request(config, px_conn->next);
                     nfds--;
                 }
 
+                
+                if (retval) {
+                    // delete b_conn and s_conn
+                    close_connection(config, px_conn->next);
+                    
+                    // delete px_conn
+                    px_conn_t* tmp = px_conn->next;
+                    px_conn->next = px_conn->next->next;
+                    free(tmp);
+                    continue;
+                }
+                
                 if (s_conn && FD_ISSET(s_conn->fd, &readyset)) {
-                    process_server_response(config, px_conn);
+                    retval = process_server_response(config, px_conn->next);
                     nfds--;
+                }
+
+                if (retval) {
+                    // delete b_conn and s_conn
+                    close_connection(config, px_conn->next);
+                    
+                    
+                    // delete px_conn
+                    px_conn_t* tmp = px_conn->next;
+                    px_conn->next = px_conn->next->next;
+                    free(tmp);
                 }
 
             }
@@ -114,7 +152,7 @@ int process_browser_conn(int listenSock, px_config_t * config) {
     
     if ((client_sock = accept(listenSock, (struct sockaddr *) &cliAddr,
                          &cliSize)) == -1) {
-        perror("proxy_run could not bind socket");
+        perror("proxy_run could not accept socket");
         exit(-1);    
     }
 
@@ -132,45 +170,117 @@ int process_browser_conn(int listenSock, px_config_t * config) {
     px_conn_t * conn = malloc(sizeof(px_conn_t));
     conn->b_conn = b_conn;
     conn->s_conn = NULL;
-    conn->next = config->conns;
+    conn->next = config->conns->next;
 
-    config->conns = conn;
+    config->conns->next = conn;
+
+    logmessage("accept a new connection from browser\n", NULL, 0);
+
+    return 0;
 }
 
 
-void process_browser_request(px_config_t * config, px_conn_t * px_conn) {
+int process_browser_request(px_config_t * config, px_conn_t * px_conn) {
     browser_conn_t * b_conn = px_conn->b_conn;
     parse_browser_request(config, b_conn);
-    if (b_conn->is_parse_done) {
-        if (b_conn->req_type == F4M_REQ) {
-            // TODO for F4M_REQ, set s_conn->resp_type = F4M_RESP
-            // TODO, init struct of s_conn
-            // TODO: bind fake ip to outbound sock
-            process_f4m_request(config, px_conn);
+    if (b_conn->is_parse_done == 1) {
+        logmessage("Receive request from browser\n", b_conn->buffer, b_conn->bufferSize);
+        if (b_conn->req_type == HTML_REQ) {
+            if (process_html_request(config, px_conn) < 0) {
+                fprintf(stderr, "Failed in process html request\n");
+                return -1;
+            }
+        } else if (b_conn->req_type == F4M_REQ) {
+            if (process_f4m_request(config, px_conn) < 0) {
+                fprintf(stderr, "Failed in process f4m request\n");
+                return -1;
+            }
         } else if (b_conn->req_type == CHUNK_REQ) {
-            process_chunk_request(config, px_conn);
+           if (process_chunk_request(config, px_conn) < 0) {
+                fprintf(stderr, "Failed in process chunk request\n");
+                return -1;
+           }
         } else {
-            // TODO unknown browser request type
+            fprintf(stderr, "unknown browser request type\n");
+            return -1;
         }
         clean_bconn_after_parse(b_conn);
+    } else if (b_conn->is_parse_done < 0) {
+        fprintf(stderr, "Failed in parse browser request\n");
+        return -1;
     }
+
+    if (b_conn->is_close){
+        logmessage("close connection due to browser\n", NULL, 0);
+        return 1;
+    }
+
+    return 0;
 }
 
-void process_server_response(px_config_t * config, px_conn_t * px_conn) {
+int process_server_response(px_config_t * config, px_conn_t * px_conn) {
     // TODO process server response
     server_conn_t * s_conn = px_conn->s_conn;
     parse_server_response(config, s_conn);
-    if (s_conn->is_parse_done) {
-        if (s_conn->resp_type == F4M_RESP) {
-            process_f4m_response(config, px_conn);
+    if (s_conn->is_parse_done == 1) {
+        logmessage("Receive response from server\n", s_conn->buffer, s_conn->bufferSize);
+        if (s_conn->resp_type == HTML_RESP) {
+            if (process_html_response(config, px_conn) < 0) {
+                fprintf(stderr, "Failed in process html response\n");
+                return -1;
+            }
+        } else if (s_conn->resp_type == F4M_RESP) {
+            if (process_f4m_response(config, px_conn) < 0) {
+                fprintf(stderr, "Failed in process f4m response\n");
+                return -1;
+            }
         } else if (s_conn->resp_type == NOLIST_F4M_RESP) {
-            process_nolist_f4m_response(config, px_conn);
+            if (process_nolist_f4m_response(config, px_conn) < 0) {
+                fprintf(stderr, "Failed in process nolist f4m response\n");
+                return -1;
+            }
         } else if (s_conn->resp_type == CHUNK_RESP) {
-            process_chunk_response(config, px_conn);
+            if (process_chunk_response(config, px_conn) < 0) {
+                fprintf(stderr, "Failed in process chunk response\n");
+                return -1;
+            }
         } else {
-            // TODO unknown server response type
-            // TODO after finish a video, free bitrates
+            fprintf(stderr, "unknown server response type\n");
+            return -1;
         }
         clean_sconn_after_parse(s_conn);
+    } else if (s_conn->is_parse_done < 0){
+        fprintf(stderr, "Failed in parse server response\n");
+        return -1;
     }
+
+    if (s_conn->is_close){
+        logmessage("close connection due to server\n", NULL, 0);
+        return 1;
+    }
+
+    return 0;
+}
+
+void close_connection(px_config_t * config, px_conn_t* px_conn) {
+    server_conn_t * s_conn = px_conn->s_conn;
+    browser_conn_t* b_conn = px_conn->b_conn;
+
+    save_history_bitrates(config, px_conn);
+    
+    if (b_conn) {
+        clean_bconn_after_parse(b_conn);
+        FD_CLR(b_conn->fd, &config->readset);
+        close(b_conn->fd);
+        free(b_conn);
+    }
+
+    if (s_conn) {
+        clean_sconn_after_parse(s_conn);
+        FD_CLR(s_conn->fd, &config->readset);
+        close(s_conn->fd);
+
+        free(s_conn);
+    }
+    
 }

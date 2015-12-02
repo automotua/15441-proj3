@@ -1,3 +1,14 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <errno.h>
+#include <ctype.h>
+#include "px_parse.h"
+#include "http_parse.h"
+#include "parser.h"
+
 extern struct Request* requestResult;
 extern FILE* yyin;
 
@@ -12,6 +23,9 @@ void parse_browser_request(px_config_t * config, browser_conn_t * b_conn) {
      *           2. All HTTP requests have no body (only GET request)
      *           3. Ignore invalid HTTP request without any response 
      */
+
+    // default is keeping alive
+    b_conn->is_close = 0;
     
     char buf;
     int readret = 0;
@@ -35,10 +49,13 @@ void parse_browser_request(px_config_t * config, browser_conn_t * b_conn) {
         }
 
         // receive data from browser
-        readret = recv(b_conn->fd, buf, 1, MSG_DONTWAIT);
+        readret = recv(b_conn->fd, &buf, 1, MSG_DONTWAIT);
 
-        if (readret < 0){
-            if (errno == EAGAIN || errno == EWOULDBLOCK){
+        if (readret <= 0){
+            if (readret == 0){
+                b_conn->is_parse_done = 0;
+                b_conn->is_close = 1;
+            } else if (errno == EAGAIN || errno == EWOULDBLOCK){
                 // finish recving, has not found CRLFCRLF
                 b_conn->state = state;
                 b_conn->is_parse_done = 0;          
@@ -76,7 +93,7 @@ void parse_browser_request(px_config_t * config, browser_conn_t * b_conn) {
     requestResult->requestLine.httpVersion.http = NULL;    
 
     // set buffer for yacc
-    set_parsing_buf(b_conn->buffer, b_conn->bufferSize);
+    set_parsing_buf(b_conn->buffer, b_conn->bufferSize);  
 
     yyrestart(yyin);
     // parse request
@@ -103,10 +120,15 @@ void parse_browser_request(px_config_t * config, browser_conn_t * b_conn) {
 
     // check type
     char* dot = strrchr(b_conn->url, '.');
-    if (dot != NULL && strcmp(dot+1, "f4m") == 0)
+    char* slash = strrchr(b_conn->url, '/');
+    char* seg = strstr(slash, "Seg");
+    char* frag = strstr(slash, "Frag");
+    if (dot && strcmp(dot+1, "f4m") == 0)
         b_conn->req_type = F4M_REQ;
-    else
+    else if (seg && frag)
         b_conn->req_type = CHUNK_REQ;
+    else
+        b_conn->req_type = HTML_REQ;
 
     b_conn->is_parse_done = 1;
 }
@@ -159,6 +181,10 @@ void parse_server_response(px_config_t * config, server_conn_t * s_conn) {
 
     char buf;
     int readret = 0;
+    char buffer[8192];
+
+    // default is keeping connection
+    s_conn->is_close = 0;
 
     // check if receiving response body (content)
     while (s_conn->content_length >= 0) {
@@ -169,10 +195,14 @@ void parse_server_response(px_config_t * config, server_conn_t * s_conn) {
         }
 
         // receive data from server
-        readret = recv(s_conn->fd, buf, 1, MSG_DONTWAIT);
+        readret = recv(s_conn->fd, buffer, 8192, MSG_DONTWAIT);
 
-        if (readret < 0){
-            if (errno == EAGAIN || errno == EWOULDBLOCK){
+        if (readret <= 0){
+            if (readret == 0){
+                // close connection
+                s_conn->is_parse_done = 0;
+                s_conn->is_close = 1;
+            } else if (errno == EAGAIN || errno == EWOULDBLOCK){
                 // finish recving, has not finish receiving body
                 s_conn->is_parse_done = 0;          
             } else {
@@ -182,8 +212,9 @@ void parse_server_response(px_config_t * config, server_conn_t * s_conn) {
             return;
         }
 
-        s_conn->file_data[s_conn->cur_size++] = buf;
-        s_conn->content_length--;
+        memcpy(s_conn->file_data + s_conn->cur_size, buffer, readret);
+        s_conn->cur_size += readret;
+        s_conn->content_length -= readret;
     }
 
     // a new response, check CRLFCRLF state
@@ -205,10 +236,14 @@ void parse_server_response(px_config_t * config, server_conn_t * s_conn) {
         }
 
         // receive data from server
-        readret = recv(s_conn->fd, buf, 1, MSG_DONTWAIT);
+        readret = recv(s_conn->fd, &buf, 1, MSG_DONTWAIT);
 
-        if (readret < 0){
-            if (errno == EAGAIN || errno == EWOULDBLOCK){
+        if (readret <= 0){
+            if (readret == 0){
+                // close connection
+                s_conn->is_parse_done = 0;
+                s_conn->is_close = 1;
+            } else if (errno == EAGAIN || errno == EWOULDBLOCK){
                 // finish recving, has not found CRLFCRLF
                 s_conn->state = state;
                 s_conn->is_parse_done = 0;          
@@ -234,13 +269,22 @@ void parse_server_response(px_config_t * config, server_conn_t * s_conn) {
     }
 
     // has found CRLFCRLF, parse response
-    char one_line[MAX_HEADER_LENGTH]
+    char one_line[MAX_HEADER_LENGTH];
+    char* retval;
     char* line_begin = s_conn->buffer;
     char* line_end = strstr(line_begin, "\r\n");
     while (line_end != line_begin){
-        strncpy(one_line, line_begin, line_end - line_begin);
-        if ((s_conn->content_length = parse_content_length(one_line)) >= 0)
-            break;
+        memcpy(one_line, line_begin, line_end - line_begin);
+        one_line[line_end - line_begin] = '\0';
+        
+        if ((retval = get_request_header_value(one_line, "content-length")))
+            s_conn->content_length = atoi(retval);
+        
+        if ((retval = get_request_header_value(one_line, "connection"))){
+            if (strcmp(retval, "close") == 0 || strcmp(retval, "Close") == 0)
+                s_conn->is_close = 1;          
+        }
+
         line_begin = line_end + 2;
         line_end = strstr(line_begin, "\r\n");
     }
@@ -253,14 +297,15 @@ void parse_server_response(px_config_t * config, server_conn_t * s_conn) {
 
     // finish parsing response head, will parse body (content) in the next time
     s_conn->is_parse_done = 0;
+
     if (s_conn->resp_type == F4M_RESP){
         // f4m file, only need body
         s_conn->file_data = malloc(s_conn->content_length);
         s_conn->cur_size = 0;
     } else {
-        // f4m nolist or chunk data, need HTTP header + body
+        // html, f4m nolist or chunk data, need HTTP header + body
         s_conn->file_data = malloc(s_conn->bufferSize + s_conn->content_length);
-        strcpy(s_conn->file_data, s_conn->buffer);
+        memcpy(s_conn->file_data, s_conn->buffer, s_conn->bufferSize);
         s_conn->cur_size = s_conn->bufferSize;
     }
 }
@@ -273,45 +318,34 @@ void clean_sconn_after_parse(server_conn_t * s_conn) {
         s_conn->file_data = NULL;
     }
     s_conn->content_length = -1;
-    
-    if (s_conn->resp_type == F4M_RESP){
-        // next time, expect NOLIST_F4M_RESP
-        s_conn->resp_type = NOLIST_F4M_RESP;
-    } else if (s_conn->resp_type == NOLIST_F4M_RESP){
-        // next time, expect CHUNK_RESP
-        s_conn->resp_type = CHUNK_RESP;
-    } else {
-        // next time, expect CHUNK_RESP
-        s_conn->resp_type = CHUNK_RESP;
-    }
 }
 
-int parse_content_length(char* line){
-    
+
+char* get_request_header_value(char* line, char* key) {
     char* colon = strchr(line, ':');
 
     if (colon == NULL)
-        return -1;
+        return NULL;
 
     char* key_begin = line;
     char* key_end = colon - 1;
-    char* value_begin - colon + 1;
+    char* value_begin = colon + 1;
 
     // trim
-    while ((key_begin == ' ' || key_begin == '\t') && (key_begin != key_end))
-        key_begin++
-    while ((key_end == ' ' || key_end == '\t') && (key_begin != key_end))
+    while ((*key_begin == ' ' || *key_begin == '\t') && (key_begin != key_end))
+        key_begin++;
+    while ((*key_end == ' ' || *key_end == '\t') && (key_begin != key_end))
         key_end--;
 
     // convert to lower case
     char* tmp;
     for (tmp = key_begin; tmp <= key_end; tmp++)
-        tolower(*tmp);
+        *tmp = tolower(*tmp);
 
-    // check if it is content_length
-    if (strncmp(key_begin, "content-length", key_end - key_begin + 1) != 0)
-        return -1;
+    // check if match key
+    if (strncmp(key_begin, key, key_end - key_begin + 1) != 0)
+        return NULL;
 
     // get length
-    return atoi(value_begin);
+    return value_begin;
 }
