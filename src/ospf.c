@@ -1,3 +1,7 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include "ospf.h"
 
 static node_t nodes;
 static char** servers;
@@ -15,7 +19,10 @@ int init_ospf(char* lsa_file_path) {
         return -1;
     }
 
-    while(fgets(buf, file)) {
+    while(fgets(buf, BUF_LEN, file)) {
+        if (buf[strlen(buf)-1] == '\n')
+            buf[strlen(buf)-1] = '\0';
+
         char* space = strchr(buf, ' ');
         if (!space){
             fprintf(stderr, "invalid format\n");
@@ -32,21 +39,22 @@ int init_ospf(char* lsa_file_path) {
         }
 
         *space2 = '\0';
-        int seq_num = atoi(space);
+        int seq_num = atoi(space + 1);
 
         node_t* cur_node = find_node(id);
         if (!cur_node)  {
-            cur_node = new_node(id, seq_num)
+            cur_node = new_node(id, seq_num);
         }
 
-        if (cur_node->seq_num <= seq_num)
+        if (cur_node->seq_num > seq_num)
             continue;
+        cur_node->seq_num = seq_num;
 
         // realase old neighbors
         release_neighbors(cur_node->neighbors);
         cur_node->neighbors = NULL;
 
-        space2 += 1
+        space2 += 1;
         space2[strlen(space2) + 1] = '\0';
         space2[strlen(space2)] = ',';
 
@@ -66,6 +74,7 @@ int init_ospf(char* lsa_file_path) {
             cur_node->neighbors = neighbor;
 
             space2 = comma + 1;
+            comma = strchr(space2, ',');
         }
 
     }
@@ -74,7 +83,7 @@ int init_ospf(char* lsa_file_path) {
 }
 
 int mark_server(char* server_file_path) {
-    FILE file = fopen(server_file_path, "r");
+    FILE* file = fopen(server_file_path, "r");
     if (!file) {
         fprintf(stderr, "no server file\n");
         return -1;
@@ -83,7 +92,10 @@ int mark_server(char* server_file_path) {
     server_num = 0;
 
     char buf[BUF_LEN];
-    while(fgets(buf, file)) {
+    while(fgets(buf, BUF_LEN, file)) {
+        if (buf[strlen(buf)-1] == '\n')
+            buf[strlen(buf)-1] = '\0';
+        
         node_t* node = find_node(buf);
         if (!node) {
             fprintf(stderr, "can not find server: %s\n", buf);
@@ -132,12 +144,12 @@ int find_closest_server(int is_robin, char* node_id, char* result_id) {
     // begin dijkstra
     while (cur_node && !cur_node->is_server) {
         // update distance
-        tmp = cur_node->neighbors;
-        while(tmp) {
-            if (((node_t*)(tmp->node)->distance == -1) || 
-                ((node_t*)(tmp->node)->distance > cur_node->distance + 1))
-                (node_t*)(tmp->node)->distance = cur_node->distance + 1;
-            tmp = tmp->next;
+        neighbor_t* tmp_neighbor = cur_node->neighbors;
+        while(tmp_neighbor) {
+            if ((((node_t*)tmp_neighbor->node)->distance == -1) || 
+                (((node_t*)tmp_neighbor->node)->distance > cur_node->distance + 1))
+                ((node_t*)tmp_neighbor->node)->distance = cur_node->distance + 1;
+            tmp_neighbor = tmp_neighbor->next;
         }
 
         // mark current node as finish
@@ -148,7 +160,8 @@ int find_closest_server(int is_robin, char* node_id, char* result_id) {
         tmp = nodes.next;
         while(tmp) {
             if (!tmp->is_finish){
-                if (!cur_node || cur_node->distance > tmp->distance)
+                if  ((tmp->distance != -1) && 
+                     (!cur_node || cur_node->distance > tmp->distance))
                     cur_node = tmp;
             }
             tmp = tmp->next;
@@ -168,7 +181,7 @@ int find_closest_server(int is_robin, char* node_id, char* result_id) {
 node_t * find_node(char* id) {
     node_t* p = nodes.next;
     while (p) {
-        if (strcpy(p->id, id) == 0)
+        if (strcmp(p->id, id) == 0)
             return p;
         p = p->next;
     }

@@ -1,3 +1,6 @@
+#ifndef _OSPF_H_
+#define _OSPF_H_
+
 #define MAX_NODE_LEN 256
 #define BUF_LEN 8192
 
@@ -31,3 +34,5 @@ node_t* new_node(char* id, int seq_num);
 void release_neighbors(neighbor_t* p);
 
 int round_robin(char* result_id);
+
+#endif

@@ -6,6 +6,7 @@
 #include <errno.h>
 #include "helper.h"
 #include "px_parse.h"
+#include "mydns.h"
 
 
 char* generate_request_to_server(browser_conn_t * b_conn, char* request_file, char* serverhost){
@@ -75,9 +76,15 @@ int init_server_connection(px_config_t * config, px_conn_t * px_conn) {
     serveraddr.sin_port = htons(SERVER_LISTEN_PORT);
     
     if (config->www_ip_in_addr.s_addr != -1)
-      serveraddr.sin_addr = config->www_ip_in_addr;
+        serveraddr.sin_addr = config->www_ip_in_addr;
     else {
-
+        // connect dns server to get ip 
+        struct addrinfo *result;
+        if (resolve("video.cs.cmu.edu", "8080", NULL, &result) < 0)
+            return -1;
+        // connect to address in result
+        serveraddr.sin_addr = ((struct sockaddr_in*)result->ai_addr)->sin_addr;
+        free(result);
     }
     
     if((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)

@@ -1,3 +1,6 @@
+#ifndef _MYDNS_H_
+#define _MYDNS_H_
+
 #include <netdb.h>
 
 /**
@@ -38,3 +41,5 @@ int init_mydns(const char *dns_ip, unsigned int dns_port, const char *local_ip);
 
 int resolve(const char *node, const char *service, 
             const struct addrinfo *hints, struct addrinfo **res);
+
+#endif

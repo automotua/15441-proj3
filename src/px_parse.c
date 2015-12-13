@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "px_parse.h"
+#include "mydns.h"
 
 static void show_usage(){
 
@@ -52,6 +53,8 @@ void px_parse_command_line(px_config_t * config) {
 
     if (config->argc == 8)
         inet_aton(argv[7], &config->www_ip_in_addr);
-    else
+    else {
         config->www_ip_in_addr.s_addr = -1;
+        init_mydns(argv[5], config->dns_port, argv[4]);
+    }
 }

@@ -1,9 +1,20 @@
-
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/ip.h> 
+#include <arpa/inet.h>
+#include <time.h>
+#include "nameserver.h"
+#include "ospf.h"
+#include "dns_helper.h"
 
 int main(int argc, char** argv) {
     ns_config_t config;
 
-    if (parse_command(argc, argv) < 0){
+    if (parse_command(argc, argv, &config) < 0){
         fprintf(stderr, "Can not parse the command\n");
         exit(1);
     }
@@ -11,7 +22,7 @@ int main(int argc, char** argv) {
     nameserver_run(&config);
 }
 
-int parse_command(int argc, char** argv) {
+int parse_command(int argc, char** argv, ns_config_t* config) {
     if (argc != 6 && argc != 7)
         return -1;
     
@@ -20,7 +31,8 @@ int parse_command(int argc, char** argv) {
     if (strcmp(argv[1], "-r") == 0){
         start_index = 1;
         config->is_robin = 1;
-    }
+    } else
+        config->is_robin = 0;
 
     strcpy(config->log_file_path, argv[start_index + 1]);
 
@@ -31,6 +43,8 @@ int parse_command(int argc, char** argv) {
     strcpy(config->servers_file_path, argv[start_index + 4]);
 
     strcpy(config->LSAs_file_path, argv[start_index + 5]);
+
+    return 0;
 }
 
 void nameserver_run(ns_config_t* config){
@@ -55,6 +69,11 @@ void nameserver_run(ns_config_t* config){
     myaddr.sin_addr = config->ip_in_addr;
     myaddr.sin_port = htons(config->port);
 
+    if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("nameserver_run could not create socket");
+        exit(-1);
+    }
+
     if (bind(sock, (struct sockaddr *) &myaddr, sizeof(myaddr)) == -1) {
         perror("nameserver_run could not bind socket");
         exit(1);
@@ -74,33 +93,37 @@ void nameserver_run(ns_config_t* config){
             continue;
         }
 
-        char* query_name = parse_dns_request(buf, size);
+        unsigned short dns_id = 0;
+        char* query_name = parse_dns_request(buf, size, &dns_id);
         if (query_name != NULL) {
-            if (strcmp(query_name, "") != 0) {
+            if (strcmp(query_name, VALID_QUERY_NAME) != 0) {
                 // Name Error
-                send_dns_pkt(&from, NULL, 3);
+                send_dns_pkt(sock, &from, NULL, dns_id, 3);
             } else {
+                char client_ip[MAX_NODE_LEN];
+                sprintf(client_ip, "%s", inet_ntoa(from.sin_addr));
+
                 char result_ip[MAX_NODE_LEN];
-                if (find_closest_server(config->is_robin, query_name, result_ip) < 0){
+                if (find_closest_server(config->is_robin, client_ip, result_ip) < 0){
                     // Server failure
-                    send_dns_pkt(&from, NULL, 2);
+                    send_dns_pkt(sock, &from, NULL, dns_id, 2);
                 } else {
                     // No error condition
                     logging(config->log_file_path, &from.sin_addr, query_name, result_ip);
-                    send_dns_pkt(&from, result_ip, 0);
+                    send_dns_pkt(sock, &from, result_ip, dns_id, 0);
                 }
             }
             free(query_name);
         } else 
             // Query format error
-            send_dns_pkt(&from, NULL, 1);
+            send_dns_pkt(sock, &from, NULL, dns_id, 1);
     }
 
 }
 
-void send_dns_pkt(struct sockaddr_in* from, char* ip, int rcode) {
+void send_dns_pkt(int sock, struct sockaddr_in* from, char* ip, unsigned short dns_id, int rcode) {
     int pkt_size;
-    char* pkt = generate_dns_response(ip, rcode, &pkt_size);
+    char* pkt = generate_dns_response(VALID_QUERY_NAME, ip, dns_id, rcode, &pkt_size);
     send_packet(sock, pkt, pkt_size, 0, (struct sockaddr *)from, sizeof(*from));
     free(pkt);
 }

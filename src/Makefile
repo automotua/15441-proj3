@@ -5,9 +5,10 @@
 #
 CC = gcc
 CFLAGS = -g -Wall -Werror -std=gnu99
-OBJS = proxy.o px_parse.o http_parse.o f4m.o chunk.o helper.o y.tab.o lex.yy.o
+OBJS = proxy.o px_parse.o http_parse.o f4m.o chunk.o helper.o y.tab.o lex.yy.o dns_helper.o mydns.o
+OBJS2 = nameserver.o ospf.o dns_helper.o
 
-default: proxy
+default: proxy nameserver
 
 proxy.o: proxy.c proxy.h
 	$(CC) $(CFLAGS) -c proxy.c
@@ -27,6 +28,18 @@ chunk.o: chunk.c chunk.h
 helper.o: helper.c helper.h
 	$(CC) $(CFLAGS) -c helper.c
 
+nameserver.o: nameserver.c nameserver.h
+	$(CC) $(CFLAGS) -c nameserver.c
+
+ospf.o: ospf.c ospf.h
+	$(CC) $(CFLAGS) -c ospf.c
+
+mydns.o: mydns.c mydns.h
+	$(CC) $(CFLAGS) -c mydns.c
+
+dns_helper.o: dns_helper.c dns_helper.h
+	$(CC) $(CFLAGS) -c dns_helper.c
+
 y.tab.o: y.tab.c
 	gcc -g -c $^ -o $@
 
@@ -42,6 +55,9 @@ y.tab.c: parser.y
 proxy: $(OBJS)
 	$(CC) $(CFLAGS) -o proxy $(OBJS) -lexpat
 
+nameserver: $(OBJS2)
+	$(CC) $(CFLAGS) -o nameserver $(OBJS2)
+
 clean:
-	rm -f *.o proxy mylog log lex.yy.c y.tab.c y.tab.h
+	rm -f *.o proxy nameserver mylog log lex.yy.c y.tab.c y.tab.h
 
