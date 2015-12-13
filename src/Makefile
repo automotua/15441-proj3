@@ -59,5 +59,5 @@ nameserver: $(OBJS2)
 	$(CC) $(CFLAGS) -o nameserver $(OBJS2)
 
 clean:
-	rm -f *.o proxy nameserver mylog log lex.yy.c y.tab.c y.tab.h
+	rm -f *.o proxy nameserver mylog proxylog nameserverlog lex.yy.c y.tab.c y.tab.h
 

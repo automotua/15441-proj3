@@ -15,13 +15,13 @@ void generate_header(char* pkt, unsigned short dns_id, int type,
     char mask;
 
     // set QR
-    mask = type;
+    mask = type << 7;
     byte |= mask;
 
     // OPCODE is 0000
 
     // set AA
-    mask = type << 5;
+    mask = type << 2;
     byte |= mask;
 
     // TC is 0
@@ -39,7 +39,7 @@ void generate_header(char* pkt, unsigned short dns_id, int type,
     // Z is 0
 
     // set RCODE
-    byte |= RCODE << 4;
+    byte |= RCODE;
 
     // copy byte
     memcpy(pkt, &byte, 1);
@@ -54,8 +54,13 @@ void generate_header(char* pkt, unsigned short dns_id, int type,
         qdcount = htons(1);
         ancount = 0;
     } else {
-        qdcount = 0;
-        ancount = htons(1);
+        if (RCODE == 0){
+            qdcount = htons(1);
+            ancount = htons(1);
+        } else {
+            qdcount = 0;
+            ancount = 0;
+        }
     }
 
     memcpy(pkt, &qdcount, 2);
@@ -131,7 +136,7 @@ char* parse_dns_request(char* pkt, int size, unsigned short* dns_id) {
     memcpy(&byte, pkt+2, 1);
     
     // get QR
-    int qr = byte & 1;
+    int qr = (byte >> 7) & 1;
     if (qr != 0)
         return NULL;
 
@@ -196,8 +201,15 @@ char* generate_dns_response(char* qname, char* ip, unsigned short dns_id, char r
     char* packet = malloc(MAX_DNS_PKT);
 
     generate_header(packet, dns_id, 1, rcode);
-    *size = generate_record_section(packet + 12, qname, ip);
-    *size += 12;
+    if (rcode == 0) {
+        int question_size = generate_question_section(packet + 12, qname);
+        int record_size = generate_record_section(packet + 12 + question_size, qname, ip);
+    
+        *size = 12 + question_size + record_size;
+    }
+    else
+        *size = 12;
+    
 
     return packet;
 }
@@ -273,7 +285,7 @@ int parse_dns_response(struct in_addr* ip_addr, char* response_name, char* pkt, 
     memcpy(&byte, pkt+2, 1);
     
     // get QR
-    int qr = byte & 1;
+    int qr = (byte >> 7) & 1;
     if (qr != 1)
         return -1;
 
@@ -282,8 +294,15 @@ int parse_dns_response(struct in_addr* ip_addr, char* response_name, char* pkt, 
 
     // get rcode
     char mask = 0x0F;
-    int rcode = (byte >> 4) & mask;
+    int rcode = byte & mask;
     if (rcode != 0)
+        return -1;
+
+    // get qdcount
+    unsigned short qdcount_net;
+    memcpy(&qdcount_net, pkt+4, 2);
+    unsigned short qdcount = ntohs(qdcount_net);
+    if (qdcount != 1)
         return -1;
 
     // get ancount
@@ -293,10 +312,31 @@ int parse_dns_response(struct in_addr* ip_addr, char* response_name, char* pkt, 
     if (ancount != 1)
         return -1;
 
-    // parse resource record
-    // parse NAME
+    // parse question section
     pkt += 12;
     size -= 12;
+    while (size > 0) {
+        char num;
+        // get length of label
+        memcpy(&num, pkt, 1);
+        pkt += 1;
+        size -= 1;
+        // check if the last label
+        if (num == 0){
+            break;
+        }
+
+        // skip label
+        pkt += (int)num;
+        size -= (int)num;
+    }  
+
+    // skip 4 bytes, 2 for QNAME and 2 for QTYPE
+    pkt += 4;
+    size -= 4;
+
+    // parse resource record
+    // parse NAME
     char* cur = response_name;
     while (size > 0) {
         char num;

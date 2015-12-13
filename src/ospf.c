@@ -105,17 +105,19 @@ int mark_server(char* server_file_path) {
         server_num++;
     }
 
+    fclose(file);
+
     // for round robin
     servers = malloc(sizeof(char*) * server_num);
     server_num = 0;
-    node_t* p = nodes.next;
-    while (p){
-        if (p->is_server) {
-            servers[server_num] = malloc(strlen(p->id) + 1);
-            strcpy(servers[server_num++], p->id);
-        }
-        p = p->next;
+    file = fopen(server_file_path, "r");
+    while(fgets(buf, BUF_LEN, file)) {
+        if (buf[strlen(buf)-1] == '\n')
+            buf[strlen(buf)-1] = '\0';
+        servers[server_num] = malloc(strlen(buf) + 1);
+        strcpy(servers[server_num++], buf);
     }
+    fclose(file);
 
     robin_index = 0;
 
