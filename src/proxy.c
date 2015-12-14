@@ -4,6 +4,10 @@
  * Authors: Ke Wu <kewu@andrew.cmu.edu>
  *          Junqiang Li <junqiangl@andrew.cmu.edu>
  *
+ * Date: 12-13-2015
+ *
+ * Description: the main file of proxy. It will process request from browser
+ *              and process response from server. 
  */
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -97,7 +101,8 @@ void proxy_run(px_config_t * config) {
             server_conn_t * s_conn;
 
             // begin process browser / server request
-            for (px_conn = config->conns; px_conn && px_conn->next && nfds > 0; px_conn = px_conn->next) {
+            for (px_conn = config->conns; px_conn && px_conn->next && nfds > 0; 
+                                                    px_conn = px_conn->next) {
                 b_conn = px_conn->next->b_conn;
                 s_conn = px_conn->next->s_conn;
 
@@ -108,7 +113,7 @@ void proxy_run(px_config_t * config) {
                     nfds--;
                 }
 
-                
+                // something wrong, need to close connection
                 if (retval) {
                     // delete b_conn and s_conn
                     close_connection(config, px_conn->next);
@@ -125,10 +130,10 @@ void proxy_run(px_config_t * config) {
                     nfds--;
                 }
 
+                // something wrong, need to close connection
                 if (retval) {
                     // delete b_conn and s_conn
                     close_connection(config, px_conn->next);
-                    
                     
                     // delete px_conn
                     px_conn_t* tmp = px_conn->next;
@@ -143,8 +148,6 @@ void proxy_run(px_config_t * config) {
 }
 
 int process_browser_conn(int listenSock, px_config_t * config) {
-    // TODO process new browser connection
-    // TODO init struct of b_conn
     // accept(), create new connection
     struct sockaddr_in cliAddr;
     socklen_t cliSize = sizeof(cliAddr);
@@ -184,7 +187,8 @@ int process_browser_request(px_config_t * config, px_conn_t * px_conn) {
     browser_conn_t * b_conn = px_conn->b_conn;
     parse_browser_request(config, b_conn);
     if (b_conn->is_parse_done == 1) {
-        logmessage("Receive request from browser\n", b_conn->buffer, b_conn->bufferSize);
+        logmessage("Receive request from browser\n", 
+                                        b_conn->buffer, b_conn->bufferSize);
         if (b_conn->req_type == HTML_REQ) {
             if (process_html_request(config, px_conn) < 0) {
                 fprintf(stderr, "Failed in process html request\n");
@@ -219,11 +223,11 @@ int process_browser_request(px_config_t * config, px_conn_t * px_conn) {
 }
 
 int process_server_response(px_config_t * config, px_conn_t * px_conn) {
-    // TODO process server response
     server_conn_t * s_conn = px_conn->s_conn;
     parse_server_response(config, s_conn);
     if (s_conn->is_parse_done == 1) {
-        logmessage("Receive response from server\n", s_conn->buffer, s_conn->bufferSize);
+        logmessage("Receive response from server\n", s_conn->buffer, 
+                                                            s_conn->bufferSize);
         if (s_conn->resp_type == HTML_RESP) {
             if (process_html_response(config, px_conn) < 0) {
                 fprintf(stderr, "Failed in process html response\n");
@@ -262,6 +266,8 @@ int process_server_response(px_config_t * config, px_conn_t * px_conn) {
     return 0;
 }
 
+/* close connection of browser and server, need to save state (available
+    bitrates, throughput) in case connection will be rebuilt */
 void close_connection(px_config_t * config, px_conn_t* px_conn) {
     server_conn_t * s_conn = px_conn->s_conn;
     browser_conn_t* b_conn = px_conn->b_conn;

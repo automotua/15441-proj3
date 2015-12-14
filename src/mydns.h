@@ -1,3 +1,15 @@
+/*
+ * mydns.h
+ *
+ * Authors: Ke Wu <kewu@andrew.cmu.edu>
+ *          Junqiang Li <junqiangl@andrew.cmu.edu>
+ *
+ * Date: 12-13-2015
+ *
+ * Description: header file of mydns.c
+ *
+ */
+
 #ifndef _MYDNS_H_
 #define _MYDNS_H_
 

@@ -4,6 +4,11 @@
  * Authors: Ke Wu <kewu@andrew.cmu.edu>
  *          Junqiang Li <junqiangl@andrew.cmu.edu>
  *
+ * Date: 12-13-2015
+ *
+ * Description: some helper functions for generate dns header, generate dns
+ *              request, generate dns response, parse dns request and parse
+ *              dns response. 
  */
 
 #include <stdlib.h>

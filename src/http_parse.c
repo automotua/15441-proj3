@@ -1,3 +1,15 @@
+/*
+ * http_parse.c
+ *
+ * Authors: Ke Wu <kewu@andrew.cmu.edu>
+ *          Junqiang Li <junqiangl@andrew.cmu.edu>
+ *
+ * Date: 12-13-2015
+ *
+ * Description: parse HTTP request from browser and HTTP response from server
+ *
+ *
+ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,11 +25,6 @@ extern struct Request* requestResult;
 extern FILE* yyin;
 
 void parse_browser_request(px_config_t * config, browser_conn_t * b_conn) {
-    // TODO parse the browser request
-    // modify at least the following attributes of b_conn:
-    // b_conn->req_type
-    // b_conn->is_parse_done
-    // b_conn->url
 
     /* Assume:   1. A HTTP request always smaller than 8192 bytes
      *           2. All HTTP requests have no body (only GET request)
@@ -110,7 +117,7 @@ void parse_browser_request(px_config_t * config, browser_conn_t * b_conn) {
 
     // check the length of url
     if (requestResult->requestLine.requestURI.absPath == NULL ||
-        strlen(requestResult->requestLine.requestURI.absPath) >= MAX_URL_LENGTH){
+        strlen(requestResult->requestLine.requestURI.absPath)>= MAX_URL_LENGTH){
         b_conn->is_parse_done = -1;
         return;
     }
@@ -133,7 +140,7 @@ void parse_browser_request(px_config_t * config, browser_conn_t * b_conn) {
     b_conn->is_parse_done = 1;
 }
 
-
+// clean parsing-related state after finish a parse
 void clean_bconn_after_parse(browser_conn_t * b_conn) {
     b_conn->bufferSize = 0;
     b_conn->state = STATE_START;
@@ -169,11 +176,6 @@ void clean_bconn_after_parse(browser_conn_t * b_conn) {
 }
 
 void parse_server_response(px_config_t * config, server_conn_t * s_conn) {
-    // TODO parse the server response
-    // modify at least the following attributes of s_conn:
-    // s_conn->resp_type
-    // s_conn->is_parse_done
-    // s_conn->file_data
 
     /* Assume:   1. A HTTP response header always smaller than 8192 bytes
      *           2. No invalid HTTP response
@@ -310,6 +312,7 @@ void parse_server_response(px_config_t * config, server_conn_t * s_conn) {
     }
 }
 
+// clean parsing-related state after finish a parse
 void clean_sconn_after_parse(server_conn_t * s_conn) {
     s_conn->state = STATE_START;
     s_conn->bufferSize = 0;
@@ -320,7 +323,7 @@ void clean_sconn_after_parse(server_conn_t * s_conn) {
     s_conn->content_length = -1;
 }
 
-
+// get value of a key:value pair in HTTP header
 char* get_request_header_value(char* line, char* key) {
     char* colon = strchr(line, ':');
 

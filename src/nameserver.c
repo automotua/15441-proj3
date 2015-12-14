@@ -1,3 +1,17 @@
+/*
+ * nameserver.c
+ *
+ * Authors: Ke Wu <kewu@andrew.cmu.edu>
+ *          Junqiang Li <junqiangl@andrew.cmu.edu>
+ *
+ * Date: 12-13-2015
+ *
+ * Description: the main file of nameserver, it will listen dns request, parse
+ *              the request, choose a CDN server ip based on load balancing and
+ *              send a dns response back.
+ *
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -54,6 +68,7 @@ void nameserver_run(ns_config_t* config){
     socklen_t fromlen = sizeof(from);
     char buf[BUF_LEN];
 
+    // init ospf
     if (init_ospf(config->LSAs_file_path) < 0){
         fprintf(stderr, "initialize ospf error\n");
         exit(1);
@@ -64,6 +79,7 @@ void nameserver_run(ns_config_t* config){
         exit(1);
     }
 
+    // init socket
     bzero(&myaddr, sizeof(myaddr));
     myaddr.sin_family = AF_INET;
     myaddr.sin_addr = config->ip_in_addr;
@@ -87,13 +103,15 @@ void nameserver_run(ns_config_t* config){
         select(sock+1, &readset, NULL, NULL, NULL);
 
         /* receive a UDP packet */
-        int size = recvfrom(sock, buf, BUF_LEN, 0, (struct sockaddr *) &from, &fromlen);
+        int size = 
+           recvfrom(sock, buf, BUF_LEN, 0, (struct sockaddr *) &from, &fromlen);
         if (size < 0) {
             perror("error in recvfrom()");
             continue;
         }
 
         unsigned short dns_id = 0;
+        // parse dns request
         char* query_name = parse_dns_request(buf, size, &dns_id);
         if (query_name != NULL) {
             if (strcmp(query_name, VALID_QUERY_NAME) != 0) {
@@ -104,12 +122,15 @@ void nameserver_run(ns_config_t* config){
                 sprintf(client_ip, "%s", inet_ntoa(from.sin_addr));
 
                 char result_ip[MAX_NODE_LEN];
-                if (find_closest_server(config->is_robin, client_ip, result_ip) < 0){
+                // apply ospf
+                if (find_closest_server(config->is_robin, client_ip, 
+                                                                result_ip) < 0){
                     // Server failure
                     send_dns_pkt(sock, &from, NULL, dns_id, 2);
                 } else {
                     // No error condition
-                    logging(config->log_file_path, &from.sin_addr, query_name, result_ip);
+                    logging(config->log_file_path, &from.sin_addr, query_name, 
+                                                                    result_ip);
                     send_dns_pkt(sock, &from, result_ip, dns_id, 0);
                 }
             }
@@ -121,9 +142,11 @@ void nameserver_run(ns_config_t* config){
 
 }
 
-void send_dns_pkt(int sock, struct sockaddr_in* from, char* ip, unsigned short dns_id, int rcode) {
+void send_dns_pkt(int sock, struct sockaddr_in* from, char* ip, 
+                                            unsigned short dns_id, int rcode) {
     int pkt_size;
-    char* pkt = generate_dns_response(VALID_QUERY_NAME, ip, dns_id, rcode, &pkt_size);
+    char* pkt = generate_dns_response(VALID_QUERY_NAME, ip, dns_id, rcode, 
+                                                                    &pkt_size);
     send_packet(sock, pkt, pkt_size, 0, (struct sockaddr *)from, sizeof(*from));
     free(pkt);
 }
@@ -144,12 +167,14 @@ void send_packet(int socket, char* data, size_t packet_len, int flag,
     }
 }
 
-void logging(char* log_file, struct in_addr* client_ip, char* query_name, char* response_ip) {
+void logging(char* log_file, struct in_addr* client_ip, char* query_name, 
+                                                            char* response_ip) {
     time_t now;
     time(&now);
 
     char log[1024];
-    sprintf(log, "%ld %s %s %s\n", now, inet_ntoa(*client_ip), query_name, response_ip);
+    sprintf(log, "%ld %s %s %s\n", now, inet_ntoa(*client_ip), query_name, 
+                                                                response_ip);
 
     FILE* file = fopen(log_file, "a");
     fwrite(log, 1, strlen(log), file);

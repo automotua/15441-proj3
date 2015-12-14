@@ -2,11 +2,12 @@
  * px_parse.c
  *
  *
- * Authors:
+ * Authors:     Ke Wu <kewu@andrew.cmu.edu>
+ *              Junqiang Li <junqianl@andrew.cmu.edu>
  *
- * Date:
+ * Date: 12-13-2015
  *
- * Description:
+ * Description: parse command line of proxy
  *
  */
 

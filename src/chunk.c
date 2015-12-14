@@ -4,6 +4,12 @@
  * Authors: Ke Wu <kewu@andrew.cmu.edu>
  *          Junqiang Li <junqiangl@andrew.cmu.edu>
  *
+ * Date: 12-13-2015
+ *
+ * Description: functions to process chunk reqeust from browser and chunk 
+ *              response from server. It also contains function of 
+ *              estimating throughput and logging. 
+ *
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -88,12 +94,22 @@ int process_chunk_response(px_config_t * config, px_conn_t * px_conn) {
     server_conn_t * s_conn = px_conn->s_conn;
     browser_conn_t* b_conn = px_conn->b_conn;
 
+    // find maximum bitrates;
+    int max_bitrate = -1;
+    bitrate_t* p = s_conn->bitrates;
+    while (p) {
+        max_bitrate = (max_bitrate < p->bitrate) ? p->bitrate : max_bitrate;
+        p = p->next;
+    }
+    if (max_bitrate == -1)
+        return -1;
+
     // calculate throughput
     struct timeval now, result;
     gettimeofday(&now, NULL);
     timersub(&now, &px_conn->timer, &result);
     double elapse = result.tv_sec + (double)result.tv_usec / 1000000;
-    calculate_throughput(config, px_conn, s_conn->cur_size, elapse);
+    calculate_throughput(config, px_conn, s_conn->cur_size, elapse,max_bitrate);
 
     save_history_bitrates(config, px_conn);
 
@@ -104,11 +120,13 @@ int process_chunk_response(px_config_t * config, px_conn_t * px_conn) {
 }
 
 void calculate_throughput(px_config_t * config, px_conn_t* conn, int byte_size, 
-                                                            double diff_time) {
+                                            double diff_time, int max_bitrate) {
 
     double new_throughput = byte_size * 8 / 1000 / diff_time;
-    if (new_throughput > 1500) {
-        new_throughput = 1500;
+    // if estimated throughput is too high, then just set it to 1.5 times of 
+    // the maximum available bitrate
+    if (new_throughput > max_bitrate * 1.5) {
+        new_throughput = max_bitrate * 1.5;
     }
     conn->throughput = 
         config->alpha * new_throughput + (1-config->alpha) * conn->throughput;

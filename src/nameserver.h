@@ -1,3 +1,15 @@
+/*
+ * nameserver.h
+ *
+ * Authors: Ke Wu <kewu@andrew.cmu.edu>
+ *          Junqiang Li <junqiangl@andrew.cmu.edu>
+ *
+ * Date: 12-13-2015
+ *
+ * Description: header file of nameserver.c
+ *
+ */
+
 #ifndef _NAMESERVER_H_
 #define _NAMESERVER_H_
 
@@ -21,11 +33,13 @@ int parse_command(int argc, char** argv, ns_config_t* config);
 
 void nameserver_run(ns_config_t* config);
 
-void send_dns_pkt(int sock, struct sockaddr_in* from, char* ip, unsigned short dns_id, int rcode);
+void send_dns_pkt(int sock, struct sockaddr_in* from, char* ip, 
+											unsigned short dns_id, int rcode);
 
 void send_packet(int socket, char* data, size_t packet_len, int flag,
                  struct sockaddr *dest_addr, socklen_t addr_len);
 
-void logging(char* log_file, struct in_addr* client_ip, char* query_name, char* response_ip);
+void logging(char* log_file, struct in_addr* client_ip, char* query_name, 
+															char* response_ip);
 
 #endif

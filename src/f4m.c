@@ -4,6 +4,11 @@
  * Authors: Ke Wu <kewu@andrew.cmu.edu>
  *          Junqiang Li <junqiangl@andrew.cmu.edu>
  *
+ * Date: 12-13-2015
+ *
+ * Description: functions to process HTML/f4m/nolist.f4m reqeust from browser 
+ *              and HTML/f4m/nolist.f4m response from server. It also contains 
+ *              function of parse f4m XML file.  
  */
 
 #include <expat.h>

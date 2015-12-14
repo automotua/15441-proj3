@@ -1,3 +1,15 @@
+/*
+ * ospf.h
+ *
+ * Authors: Ke Wu <kewu@andrew.cmu.edu>
+ *          Junqiang Li <junqiangl@andrew.cmu.edu>
+ *
+ * Date: 12-13-2015
+ *
+ * Description: header file of ospf.c
+ *
+ */
+
 #ifndef _OSPF_H_
 #define _OSPF_H_
 

@@ -1,13 +1,12 @@
 /*
  * proxy.h
  *
- * Authors:
+ * Authors: Ke Wu <kewu@andrew.cmu.edu>
+ *          Junqiang Li <junqiangl@andrew.cmu.edu>
  *
+ * Date: 12-13-2015
  *
- * Date:
- *
- * Description:
- *
+ * Description: header file of proxy.c
  */
 
 #ifndef _PROXY_H_

@@ -1,3 +1,17 @@
+/*
+ * ospf.c
+ *
+ * Authors: Ke Wu <kewu@andrew.cmu.edu>
+ *          Junqiang Li <junqiangl@andrew.cmu.edu>
+ *
+ * Date: 12-13-2015
+ *
+ * Description: it will read a lsa file and build a graph. Then it will apply
+ *              dijkstra algorithm (or round-robin...) to find a cloest server
+ *              for a client. 
+ *
+ */
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -13,12 +27,14 @@ int init_ospf(char* lsa_file_path) {
     char buf[BUF_LEN];
     char id[MAX_NODE_LEN], neighbor_id[MAX_NODE_LEN];
 
+    // read lsa file
     FILE* file = fopen(lsa_file_path, "r");
     if (!file) {
         fprintf(stderr, "no lsa file\n");
         return -1;
     }
 
+    // build graph using adjacency list
     while(fgets(buf, BUF_LEN, file)) {
         if (buf[strlen(buf)-1] == '\n')
             buf[strlen(buf)-1] = '\0';
@@ -46,6 +62,7 @@ int init_ospf(char* lsa_file_path) {
             cur_node = new_node(id, seq_num);
         }
 
+        // check if it is the newest sequence number
         if (cur_node->seq_num > seq_num)
             continue;
         cur_node->seq_num = seq_num;
@@ -58,6 +75,7 @@ int init_ospf(char* lsa_file_path) {
         space2[strlen(space2) + 1] = '\0';
         space2[strlen(space2)] = ',';
 
+        // parse
         char* comma = strchr(space2, ',');
         while (comma) {
             *comma = '\0';
@@ -82,6 +100,7 @@ int init_ospf(char* lsa_file_path) {
     return 0;
 }
 
+// read server file, mark server node in graph
 int mark_server(char* server_file_path) {
     FILE* file = fopen(server_file_path, "r");
     if (!file) {
@@ -124,6 +143,7 @@ int mark_server(char* server_file_path) {
     return 0;
 }
 
+// dijkstra algorithm
 int find_closest_server(int is_robin, char* node_id, char* result_id) {
     if (is_robin)
         return round_robin(result_id);
@@ -149,8 +169,9 @@ int find_closest_server(int is_robin, char* node_id, char* result_id) {
         neighbor_t* tmp_neighbor = cur_node->neighbors;
         while(tmp_neighbor) {
             if ((((node_t*)tmp_neighbor->node)->distance == -1) || 
-                (((node_t*)tmp_neighbor->node)->distance > cur_node->distance + 1))
-                ((node_t*)tmp_neighbor->node)->distance = cur_node->distance + 1;
+                (((node_t*)tmp_neighbor->node)->distance > 
+                                                    cur_node->distance + 1))
+                ((node_t*)tmp_neighbor->node)->distance =cur_node->distance + 1;
             tmp_neighbor = tmp_neighbor->next;
         }
 
@@ -180,6 +201,7 @@ int find_closest_server(int is_robin, char* node_id, char* result_id) {
     return 0;
 }
 
+// given the id (ip or router name) of node, find the pointer of the node
 node_t * find_node(char* id) {
     node_t* p = nodes.next;
     while (p) {

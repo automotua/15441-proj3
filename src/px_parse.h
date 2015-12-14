@@ -4,10 +4,9 @@
  * Authors:     Ke Wu <kewu@andrew.cmu.edu>
  *              Junqiang Li <junqianl@andrew.cmu.edu>
  *
+ * Date: 12-13-2015
  *
- * Date:
- *
- * Description:
+ * Description: header file of px_parse.c
  */
 
 #ifndef _PX_PARSE_H_

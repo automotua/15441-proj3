@@ -4,6 +4,10 @@
  * Authors: Ke Wu <kewu@andrew.cmu.edu>
  *          Junqiang Li <junqiangl@andrew.cmu.edu>
  *
+ * Date: 12-13-2015
+ *
+ * Description: header file of f4m.c
+ *
  */
 
 #ifndef _F4M_H_

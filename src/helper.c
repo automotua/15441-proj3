@@ -4,6 +4,10 @@
  * Authors: Ke Wu <kewu@andrew.cmu.edu>
  *          Junqiang Li <junqiangl@andrew.cmu.edu>
  *
+ * Date: 12-13-2015
+ *
+ * Description: including some helper functions.
+ *
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -67,7 +71,7 @@ int send_data_to_socket(int sock, char* buf, int size){
     return 0;
 }
 
-// build connection with server
+// build connection with server (may connect dns server to resolve)
 int init_server_connection(px_config_t * config, px_conn_t * px_conn) {
     if (px_conn->s_conn)
         return 0;
