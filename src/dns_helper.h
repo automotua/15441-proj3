@@ -1,3 +1,11 @@
+/*
+ * dns_helper.h
+ *
+ * Authors: Ke Wu <kewu@andrew.cmu.edu>
+ *          Junqiang Li <junqiangl@andrew.cmu.edu>
+ *
+ */
+
 #ifndef _DNS_HELPER_H
 #define _DNS_HELPER_H
 
@@ -10,10 +18,12 @@ int generate_question_section(char* pkt, const char* domain_name);
 
 char* parse_dns_request(char* pkt, int size, unsigned short* dns_id);
 
-char* generate_dns_response(char* qname, char* ip, unsigned short dns_id, char rcode, int* size);
+char* generate_dns_response(char* qname, char* ip, unsigned short dns_id, 
+														char rcode, int* size);
 
 int generate_record_section(char* pkt, char* qname, char* ip);
 
-int parse_dns_response(struct in_addr* ip_addr, char* response_name, char* pkt, int size);
+int parse_dns_response(struct in_addr* ip_addr, char* response_name, 
+														char* pkt, int size);
 
 #endif

@@ -1,3 +1,10 @@
+/*
+ * helper.c
+ *
+ * Authors: Ke Wu <kewu@andrew.cmu.edu>
+ *          Junqiang Li <junqiangl@andrew.cmu.edu>
+ *
+ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,8 +15,9 @@
 #include "px_parse.h"
 #include "mydns.h"
 
-
-char* generate_request_to_server(browser_conn_t * b_conn, char* request_file, char* serverhost){
+// generate HTTP/1.1 request that will be send to server
+char* generate_request_to_server(browser_conn_t * b_conn, char* request_file, 
+                                                            char* serverhost){
     char *request = malloc(MAX_HEADER_LENGTH);
 
     // generate the first line
@@ -37,6 +45,7 @@ char* generate_request_to_server(browser_conn_t * b_conn, char* request_file, ch
     return request;
 }
 
+// send data(buf) using TCP(sock) 
 int send_data_to_socket(int sock, char* buf, int size){
     /* send data to browser, may need send many times */
     int writeret;
@@ -58,6 +67,7 @@ int send_data_to_socket(int sock, char* buf, int size){
     return 0;
 }
 
+// build connection with server
 int init_server_connection(px_config_t * config, px_conn_t * px_conn) {
     if (px_conn->s_conn)
         return 0;
@@ -76,13 +86,14 @@ int init_server_connection(px_config_t * config, px_conn_t * px_conn) {
     serveraddr.sin_port = htons(SERVER_LISTEN_PORT);
     
     if (config->www_ip_in_addr.s_addr != -1)
+        // get server ip directly from command
         serveraddr.sin_addr = config->www_ip_in_addr;
     else {
-        // connect dns server to get ip 
+        // connect dns server to get server ip 
         struct addrinfo *result;
         if (resolve("video.cs.cmu.edu", "8080", NULL, &result) < 0)
             return -1;
-        // connect to address in result
+        // save result
         serveraddr.sin_addr = ((struct sockaddr_in*)result->ai_addr)->sin_addr;
         free(result);
     }
@@ -96,6 +107,7 @@ int init_server_connection(px_config_t * config, px_conn_t * px_conn) {
     if (connect(sock, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) < 0)
       return -1;
 
+    // init state for server connection
     server_conn_t* s_conn = malloc(sizeof(server_conn_t));
     s_conn->fd = sock;
     s_conn->file_data = NULL;
@@ -114,6 +126,8 @@ int init_server_connection(px_config_t * config, px_conn_t * px_conn) {
     return 0;
 }
 
+/* save state of connection (available bitrates, throughput) so that when 
+    connection is rebuilt, it can restore the state */
 void save_history_bitrates(px_config_t * config, px_conn_t* px_conn) {
     server_conn_t * s_conn = px_conn->s_conn;
     browser_conn_t* b_conn = px_conn->b_conn;

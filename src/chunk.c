@@ -1,3 +1,10 @@
+/*
+ * chunk.c
+ *
+ * Authors: Ke Wu <kewu@andrew.cmu.edu>
+ *          Junqiang Li <junqiangl@andrew.cmu.edu>
+ *
+ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,12 +21,14 @@ int process_chunk_request(px_config_t * config, px_conn_t * px_conn) {
     if (!s_conn){
         init_server_connection(config, px_conn);
         s_conn = px_conn->s_conn;
-
+        /* server connection is reconstructed, so connection state (available
+           bitrates, throughput) should be restored */
         char* slash = strrchr(b_conn->url, '/');
         history_bitrate_t* history_bitrate = config->history_bitrates;
         while(history_bitrate){
-            if (strlen(history_bitrate->video_path) == (slash - b_conn->url + 1) &&
-                strncmp(history_bitrate->video_path, b_conn->url, slash - b_conn->url + 1) == 0){
+            if (strlen(history_bitrate->video_path) == (slash - b_conn->url + 1) 
+                && strncmp(history_bitrate->video_path, 
+                                b_conn->url, slash - b_conn->url + 1) == 0){
                 s_conn->bitrates = history_bitrate->bitrates;
                 px_conn->throughput = history_bitrate->throughput;
                 strcpy(b_conn->video_path, history_bitrate->video_path);
@@ -46,8 +55,8 @@ int process_chunk_request(px_config_t * config, px_conn_t * px_conn) {
         p = p->next;
     }
 
+    // throughput is too low to find a bitrate, use the smallest bitrate
     if (bitrate == -1){
-        // find the smallest bitrate
         p = s_conn->bitrates;
         bitrate = p->bitrate;
         while (p){
@@ -61,7 +70,8 @@ int process_chunk_request(px_config_t * config, px_conn_t * px_conn) {
 
     s_conn->resp_type = CHUNK_RESP;
 
-    char* request = generate_request_to_server(b_conn, b_conn->url, "localhost:8080");
+    char* request = generate_request_to_server(b_conn, b_conn->url, 
+                                                            "localhost:8080");
     if (send_data_to_socket(s_conn->fd, request, strlen(request)) < 0){
         fprintf(stderr, "send data to server error\n");
         free(request);
@@ -87,16 +97,21 @@ int process_chunk_response(px_config_t * config, px_conn_t * px_conn) {
 
     save_history_bitrates(config, px_conn);
 
-    if (send_data_to_socket(b_conn->fd, s_conn->file_data, s_conn->cur_size) < 0)
+    if (send_data_to_socket(b_conn->fd, s_conn->file_data, s_conn->cur_size)< 0)
         return -1;
 
     return 0;
 }
 
-void calculate_throughput(px_config_t * config, px_conn_t* conn, int byte_size, double diff_time) {
+void calculate_throughput(px_config_t * config, px_conn_t* conn, int byte_size, 
+                                                            double diff_time) {
 
     double new_throughput = byte_size * 8 / 1000 / diff_time;
-    conn->throughput = config->alpha * new_throughput + (1-config->alpha) * conn->throughput;
+    if (new_throughput > 1500) {
+        new_throughput = 1500;
+    }
+    conn->throughput = 
+        config->alpha * new_throughput + (1-config->alpha) * conn->throughput;
 
     logging(config, conn, diff_time, new_throughput, conn->throughput);
 }
@@ -115,7 +130,8 @@ void replace_url(browser_conn_t* b_conn, int bitrate) {
     sprintf(b_conn->url, "%s%d%s", prefix, bitrate, suffix);
 }
 
-void logging(px_config_t * config, px_conn_t* conn, double duration, double tput, double avg_tput) {
+void logging(px_config_t * config, px_conn_t* conn, double duration, 
+                double tput, double avg_tput) {
     time_t now;
     time(&now);
 

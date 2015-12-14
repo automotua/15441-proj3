@@ -1,3 +1,11 @@
+/*
+ * f4m.h
+ *
+ * Authors: Ke Wu <kewu@andrew.cmu.edu>
+ *          Junqiang Li <junqiangl@andrew.cmu.edu>
+ *
+ */
+
 #ifndef _F4M_H_
 #define _F4M_H_
 

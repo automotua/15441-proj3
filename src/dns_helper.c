@@ -1,3 +1,11 @@
+/*
+ * dns_helper.c
+ *
+ * Authors: Ke Wu <kewu@andrew.cmu.edu>
+ *          Junqiang Li <junqiangl@andrew.cmu.edu>
+ *
+ */
+
 #include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
@@ -197,13 +205,15 @@ char* parse_dns_request(char* pkt, int size, unsigned short* dns_id) {
     return query_name;
 }
 
-char* generate_dns_response(char* qname, char* ip, unsigned short dns_id, char rcode, int* size) {
+char* generate_dns_response(char* qname, char* ip, unsigned short dns_id, 
+                                                    char rcode, int* size) {
     char* packet = malloc(MAX_DNS_PKT);
 
     generate_header(packet, dns_id, 1, rcode);
     if (rcode == 0) {
         int question_size = generate_question_section(packet + 12, qname);
-        int record_size = generate_record_section(packet + 12 + question_size, qname, ip);
+        int record_size = generate_record_section(packet + 12 + question_size, 
+                                                                qname, ip);
     
         *size = 12 + question_size + record_size;
     }
@@ -275,7 +285,8 @@ int generate_record_section(char* pkt, char* qname, char* ip) {
     return pkt - init_pkt;
 }
 
-int parse_dns_response(struct in_addr* ip_addr, char* response_name, char* pkt, int size) {
+int parse_dns_response(struct in_addr* ip_addr, char* response_name, char* pkt, 
+                                                                    int size) {
     // at least 12 bytes (dns response header)
     if (size < 12)
         return -1;
